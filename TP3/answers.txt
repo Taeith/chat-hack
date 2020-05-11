@@ -1,0 +1,4 @@
+Type several lines in NetcatUDP. What happens when a packet is lost ? What is the impact on your program after the losse. 
+Sur le proxy on observe un message d'erreur
+==> Dropping packet hello from /127.0.0.1:44519
+Il n'y a rien d'afficher sur le serveur et l'utilisateur mais le programme ne foncionne plus.
