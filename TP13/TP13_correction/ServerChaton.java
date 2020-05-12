@@ -8,7 +8,9 @@ import java.nio.channels.*;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.Queue;
+import java.util.Scanner;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -154,24 +156,61 @@ public class ServerChaton {
 
     static private int BUFFER_SIZE = 1_024;
     static private Logger logger = Logger.getLogger(ServerChatInt.class.getName());    
-    
+    private final ArrayBlockingQueue<String> commandQueue = new ArrayBlockingQueue<>(10);
     private final ServerSocketChannel serverSocketChannel;
     private final Selector selector;
+    private final Thread console;
 
     public ServerChaton(int port) throws IOException {
         serverSocketChannel = ServerSocketChannel.open();
         serverSocketChannel.bind(new InetSocketAddress(port));
         selector = Selector.open();
+        this.console = new Thread(this::consoleRun);
+    }
+    
+    private void consoleRun() {
+        try {
+            var scan = new Scanner(System.in);
+            while (scan.hasNextLine()) {
+                sendCommand(scan.nextLine());
+            }
+        } catch (InterruptedException e) {
+            logger.info("Console thread has been interrupted");
+        } finally {
+            logger.info("Console thread stopping");
+        }
+    }
+    
+    private void sendCommand(String message) throws InterruptedException {
+    	synchronized(commandQueue) {
+        	commandQueue.put(message);
+        	selector.wakeup();
+        }
+    }
+    
+    private void processCommands(){
+    	synchronized(commandQueue) {
+        	String command = commandQueue.poll();
+        	if (command != null) {
+        		switch (command) {
+        			case "INFO":
+        			case "SHUTDOWN":
+        			case "SHUTDOWNOW":
+        				System.out.println("command now");
+        		}
+        	}
+        }
     }
 
     public void launch() throws IOException {
         serverSocketChannel.configureBlocking(false);
         serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
         while(!Thread.interrupted()) {
-            printKeys(); // for debug
+            printKeys();
             System.out.println("Starting select");
             try {
                 selector.select(this::treatKey);
+                processCommands();
             } catch (UncheckedIOException tunneled) {
                 throw tunneled.getCause();
             }
