@@ -7,6 +7,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.util.ArrayList;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -56,7 +57,7 @@ public class ServerSumBetter {
          */
 
         private void updateInterestOps() {
-			var interestOps = 0;
+			int interestOps = 0;
 			if (!closed && bbin.hasRemaining() && bbout.hasRemaining()) {
             	interestOps = interestOps | SelectionKey.OP_READ;
             }
@@ -129,7 +130,7 @@ public class ServerSumBetter {
 		serverSocketChannel.configureBlocking(false);
 		serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
 		while(!Thread.interrupted()) {
-			printKeys(); // for debug
+			printKeys();
 			System.out.println("Starting select");
 			try {
 				selector.select(this::treatKey);
@@ -139,8 +140,7 @@ public class ServerSumBetter {
 			System.out.println("Select finished");
 		}
     }
-
-	private void treatKey(SelectionKey key) {
+    private void treatKey(SelectionKey key) {
 		printSelectedKey(key); // for debug
 		try {
 			if (key.isValid() && key.isAcceptable()) {

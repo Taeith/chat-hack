@@ -2,67 +2,60 @@ package fr.upem.net.tcp.nonblocking;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
-import java.util.Optional;
-
-import fr.upem.net.tcp.nonblocking.Reader.ProcessStatus;
 
 public class MessageReader implements Reader<Message> {
 
-    private enum State { DONE, WAITING, ERROR };
-    private State state = State.WAITING;
+    private enum State { DONE, WAITING_FOR_USERNAME, WAITING_FOR_CONTENT, ERROR };    
     private final StringReader stringReader = new StringReader();
-    private Message message = null;
+    private State state = State.WAITING_FOR_USERNAME;
     private String username;
     private String content;
 
     @Override
-    public ProcessStatus process(ByteBuffer bb) {
-        if (state == State.DONE || state == State.ERROR) {
-            throw new IllegalStateException();
+    public ProcessStatus process(ByteBuffer byteBuffer) {
+        switch (state) {
+        	case WAITING_FOR_USERNAME:
+        		ProcessStatus status = stringReader.process(byteBuffer);
+        		switch (status) {
+        			case REFILL:
+        				return status;
+        			case ERROR:
+        				state = State.ERROR;
+        				return status;
+        		}
+        		username = stringReader.get();
+        		state = State.WAITING_FOR_CONTENT;
+        		stringReader.reset();
+        	case WAITING_FOR_CONTENT:
+        		status = stringReader.process(byteBuffer);
+        		switch (status) {
+        			case REFILL:
+        				return status;
+        			case ERROR:
+        				state = State.ERROR;
+        				return status;
+        		}
+        		content = stringReader.get();
+        		state = State.DONE;
+        		stringReader.reset();
+        		return ProcessStatus.DONE;
+        	default:
+        		throw new AssertionError();
         }
-        try {
-            if (username == null) {
-            	username = readString(bb);
-            }
-            if (content == null) {
-            	content = readString(bb);	
-            }	
-        } finally {
-            bb.compact();
-        }
-        state = State.DONE;
-        message = new Message(username, content, Message.bytesFor(username, content));
-        return ProcessStatus.DONE;
     }
-    
-    private String readString(ByteBuffer bb) {    	
-    	while (true) {
-		   Reader.ProcessStatus status = stringReader.process(bb);
-		   switch (status){
-		      case DONE:
-		    	  String value = stringReader.get();
-		    	  stringReader.reset();
-		          return value;
-		      case REFILL:
-		          continue;
-		      case ERROR:
-		          throw new IllegalStateException();
-		    }
-		  }
-    }
-    
+        
     @Override
     public Message get() {
         if (state != State.DONE) {
             throw new IllegalStateException();
         }
-        return message;
+        return new Message(username, content);
     }
 
     @Override
     public void reset() {
-        state = State.WAITING;
-        message = null;
+        state = State.WAITING_FOR_USERNAME;
+        stringReader.reset();
         username = null;
         content = null;
     }

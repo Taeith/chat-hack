@@ -20,7 +20,7 @@ public class StringReader implements Reader<String> {
     public ProcessStatus process(ByteBuffer buffer) {
         switch (state) {
             case WAITING_FOR_SIZE:
-                var status = intReader.process(buffer);
+            	ProcessStatus status = intReader.process(buffer);
                 switch (status) {
                     case DONE:
                         break;
@@ -36,17 +36,17 @@ public class StringReader implements Reader<String> {
                 }
                 state = State.WAITING_FOR_CONTENT;
             case WAITING_FOR_CONTENT:
-                var missing = size - internalBuffer.position();
+                int missing = size - internalBuffer.position();
                 buffer.flip();
                 if (buffer.remaining() <= missing) {
                     internalBuffer.put(buffer);
                 } else {
-                    var oldLimit = buffer.limit();
+                	int oldLimit = buffer.limit();
                     buffer.limit(missing);
                     internalBuffer.put(buffer);
                     buffer.limit(oldLimit);
                 }
-                bb.compact();
+                buffer.compact();
                 if (internalBuffer.position() < size) {
                     return ProcessStatus.REFILL;
                 }

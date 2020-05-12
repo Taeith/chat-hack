@@ -16,13 +16,12 @@ public class ServerChaton {
 
     static private class Context {
     	
-    	final private MessageReader messageReader = new MessageReader();
-    	
         final private SelectionKey key;
         final private SocketChannel sc;
         final private ByteBuffer bbin = ByteBuffer.allocate(BUFFER_SIZE);
         final private ByteBuffer bbout = ByteBuffer.allocate(BUFFER_SIZE);
-        final private Queue<Message> queue = new LinkedList<>();
+        final private Queue<ByteBuffer> queue = new LinkedList<>(); // read mdoe
+        final private MessageReader messageReader = new MessageReader();
         final private ServerChaton server;
         private boolean closed = false;
 
@@ -40,25 +39,17 @@ public class ServerChaton {
          *
          */
         private void processIn() {
-        	System.out.println("<processIn>");
         	while (true) {
-        		System.out.println("\t loop");
         		Reader.ProcessStatus status = messageReader.process(bbin);
         		switch (status) {
         			case DONE:
-        				System.out.println("\t done");
         				Message message = messageReader.get();
         				server.broadcast(message);
         				messageReader.reset();
-        				bbin.compact();
-        				System.out.println("sQSD " + bbin.position() + " " + bbin.limit());
-        				System.out.println("</processIn>");
         				return;
         			case REFILL:
-        				System.out.println("\t refill");
         				return;
         			case ERROR:
-        				System.out.println("\t ERRRRRRROORRR");
         				silentlyClose();
         				return;
         		}
@@ -70,12 +61,10 @@ public class ServerChaton {
          *
          * @param msg
          */
-        private void queueMessage(Message message) {
-        	System.out.println("<queueMessage>");
-            queue.add(message);
+        private void queueMessage(ByteBuffer bb) {
+            queue.add(bb);
             processOut();
             updateInterestOps();
-            System.out.println("</queueMessage>");
         }
 
         /**
@@ -83,19 +72,15 @@ public class ServerChaton {
          *
          */
         private void processOut() {
-        	System.out.println("<processOut>");
             while (!queue.isEmpty()) {
-            	ByteBuffer messageBytes = queue.peek().getBytes().flip();
-            	System.out.println("\t" + bbout.remaining() + " " + messageBytes.limit());
-            	if (bbout.remaining() >= messageBytes.limit()) {
-            		System.out.println("add / bbout.position " + bbout.position());
-            		bbout.put(messageBytes);
-            		queue.poll();
+            	ByteBuffer bb = queue.peek();
+            	if (bb.remaining() <= bbout.remaining()) {
+            		queue.remove();
+            		bbout.put(bb);
             	} else {
             		return;
             	}
             }
-            System.out.println("</processOut>");
         }
 
         /**
@@ -110,28 +95,18 @@ public class ServerChaton {
          */
 
         private void updateInterestOps() {
-        	System.out.println("<updateInterestOps>");
-        	System.out.println("1");
             var interestOps = 0;
-            System.out.println("2");
             if (!closed && bbin.hasRemaining()) {
-            	System.out.println("\t READ");
                 interestOps = interestOps | SelectionKey.OP_READ;
             }
-            System.out.println("\t -> " + bbout.position() + " " + bbout.limit());
             if (bbout.position() != 0) {
-            	System.out.println("\t WRITE");
                 interestOps = interestOps | SelectionKey.OP_WRITE;
             }
-            System.out.println("3");
             if (interestOps == 0) {
-            	System.out.println("\t ERRRRRRROORRR");
                 silentlyClose();
                 return;
             }
-            System.out.println("5");
             key.interestOps(interestOps);
-            System.out.println("</updateInterestOps>");
         }
 
         private void silentlyClose() {
@@ -151,13 +126,11 @@ public class ServerChaton {
          * @throws IOException
          */
         private void doRead() throws IOException {
-        	System.out.println("<doWrite>");
             if (sc.read(bbin) == -1) {
                 closed = true;              
             }
             processIn();
             updateInterestOps();
-            System.out.println("</doWrite>");
         }
 
         /**
@@ -170,13 +143,11 @@ public class ServerChaton {
          */
 
         private void doWrite() throws IOException {
-        	System.out.println("<doWrite>");
             bbout.flip();
             sc.write(bbout);
             bbout.compact();
             processOut();
             updateInterestOps();
-            System.out.println("</doWrite>");
         }
 
     }
@@ -256,14 +227,14 @@ public class ServerChaton {
      *
      * @param msg
      */
-    private void broadcast(Message msg) {
+    private void broadcast(Message message) {
         for (SelectionKey key : selector.keys()) {
             SelectableChannel channel = key.channel();
             if (channel instanceof ServerSocketChannel) {
                 continue;
             }
             Context context = (Context) key.attachment();
-            context.queueMessage(msg);
+            context.queueMessage(message.toByteBuffer());
         }       
     }
 
